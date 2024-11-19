@@ -1,0 +1,54 @@
+trigger:
+  - dev
+pool:
+  name: default 
+
+variables:
+  dockerImageName: 'golang'
+  jfrogRegistry: 'dhilli.jfrog.io'
+  jfrogRepo: 'docker-hub-docker-local'
+stages:
+  - stage: golangapp
+    jobs:
+      - job: golangtool
+        steps:
+          - task: GoTool@0
+            inputs:
+              version: '1.22.4'
+          - task: CmdLine@2
+            inputs:
+              script: go mod tidy
+          - script: |
+              go build -o $(Build.ArtifactStagingDirectory)/myapp
+            displayName: 'Build Go application'
+          
+          # Step 4: Publish the build artifact
+          - task: PublishBuildArtifacts@1
+            inputs:
+              pathToPublish: $(Build.ArtifactStagingDirectory)
+              artifactName: 'myapp'
+              publishLocation: 'Container'
+  - stage: docker
+    jobs:
+      - job: buildandpush
+        steps:
+          - task: Docker@2
+            displayName: docker image build
+            inputs:
+              containerRegistry: 'docker-hub'
+              command: 'buildAndPush'
+              repository: 'dhillevajja/golang'
+              tags: '$(Build.BuildId)'
+              Dockerfile: 'Dockerfile'
+          # - script: sudo trivy image --format json --output trivy_report.json dhillevajja/golang:$(Build.BuildId)
+          #   displayName: scan the images
+          - task: Docker@2
+            displayName: 'push the image on jf account'
+            inputs:
+              command: 'buildAndPush'
+              containerRegistry: 'jfrog-service-connection'
+              Dockerfile: 'Dockerfile'
+              repository: '$(jfrogRepo)/$(dockerImageName)'
+              tags: '$(Build.BuildId)'
+
+
